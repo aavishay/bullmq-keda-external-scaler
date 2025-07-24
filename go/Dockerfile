@@ -22,10 +22,11 @@ RUN go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 ENV PATH="${PATH}:$(go env GOPATH)/bin"
 
 # Generate gRPC/protobuf code from externalscaler.proto
-RUN protoc --go_out=. --go-grpc_out=. \
+RUN mkdir -p externalscaler && \
+  protoc --go_out=./externalscaler --go-grpc_out=./externalscaler \
   --go_opt=paths=source_relative \
   --go-grpc_opt=paths=source_relative \
-  externalscaler/externalscaler.proto
+  externalscaler.proto
 
 # Tidy modules and build the application.
 # The -o flag specifies the output file name. We place it in the root

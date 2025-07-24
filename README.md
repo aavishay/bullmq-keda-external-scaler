@@ -122,10 +122,20 @@ redis-cli -h localhost -p 6379 LLEN bull:test-queue:active
 bullmq-keda-external-scaler/
 ├── README.md                              # This file
 ├── add-jobs.sh                           # Helper script to add test jobs
-├── externalscaler.proto                  # gRPC protocol definition
 ├── go/                                   # Go implementation
+│   ├── Dockerfile
+│   ├── externalscaler.proto              # gRPC protocol definition
+│   ├── go.mod
+│   └── redis_bull_scaler.go
 ├── python/                               # Python implementation
+│   ├── Dockerfile
+│   ├── externalscaler.proto              # gRPC protocol definition
+│   ├── redis_bull_scaler.py
+│   └── requirements.txt
 └── k8s/                                  # Kubernetes manifests
+    ├── redis-bull-scaler-deployment.yaml
+    ├── redis-bull-scaler-service.yaml
+    └── test-scaledjob.yaml
 ```
 
 ## How It Works
