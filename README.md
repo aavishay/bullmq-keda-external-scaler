@@ -66,8 +66,7 @@ kubectl apply -f k8s/
 # Or deploy individually
 kubectl apply -f k8s/redis-bull-scaler-service.yaml
 kubectl apply -f k8s/redis-bull-scaler-deployment.yaml
-kubectl apply -f k8s/redis-bull-scaledobject.yaml
-kubectl apply -f k8s/test-deployment.yaml
+kubectl apply -f k8s/test-scaledjob.yaml
 ```
 
 ### 3. Test the Scaling
@@ -97,8 +96,8 @@ kubectl get pods -n bullmq-test -w
 # Check scaler logs
 kubectl logs -n bullmq-test -l app=redis-bull-scaler -f
 
-# Check ScaledObject status
-kubectl describe scaledobject bull-queue-scaler -n bullmq-test
+# Check ScaledJob status
+kubectl describe scaledjob test-worker-job -n bullmq-test
 
 # Check current queue lengths
 redis-cli -h localhost -p 6379 LLEN bull:test-queue:wait
@@ -172,9 +171,9 @@ Common errors:
 
 ### KEDA Not Scaling
 
-1. Check ScaledObject status:
+1. Check ScaledJob status:
    ```bash
-   kubectl describe scaledobject bull-queue-scaler -n bullmq-test
+   kubectl describe scaledjob test-worker-job -n bullmq-test
    ```
 
 2. Check KEDA operator logs:
