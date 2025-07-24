@@ -120,18 +120,13 @@ redis-cli -h localhost -p 6379 LLEN bull:test-queue:active
 ## Project Structure
 
 ```
-keda-custom-scaler/
+bullmq-keda-external-scaler/
 ├── README.md                              # This file
-├── .env.example                           # Example environment configuration
-├── Dockerfile                             # Container build configuration
-├── requirements.txt                       # Python dependencies
-├── redis_bull_scaler.py                  # Main gRPC scaler implementation
 ├── add-jobs.sh                           # Helper script to add test jobs
+├── externalscaler.proto                  # gRPC protocol definition
+├── go/                                   # Go implementation
+├── python/                               # Python implementation
 └── k8s/                                  # Kubernetes manifests
-    ├── redis-bull-scaler-deployment.yaml # Scaler deployment
-    ├── redis-bull-scaler-service.yaml    # Scaler service
-    ├── redis-bull-scaledobject.yaml      # KEDA ScaledObject configuration
-    └── test-deployment.yaml              # Test worker deployment
 ```
 
 ## How It Works
