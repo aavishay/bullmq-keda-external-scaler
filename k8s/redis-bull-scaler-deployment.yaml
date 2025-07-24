@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-bull-scaler
+  namespace: bullmq-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-bull-scaler
+  template:
+    metadata:
+      labels:
+        app: redis-bull-scaler
+    spec:
+      containers:
+        - name: scaler
+          image: redis-bull-scaler:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          env:
+            - name: REDIS_HOST
+              value: "redis-service.bullmq-test.svc.cluster.local"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: WAIT_LIST
+              value: "bull:test-queue:wait"
+            - name: ACTIVE_LIST
+              value: "bull:test-queue:active"
+            - name: MAX_PODS
+              value: "10"

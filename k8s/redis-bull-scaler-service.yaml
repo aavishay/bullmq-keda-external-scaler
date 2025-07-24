@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-bull-scaler
+  namespace: bullmq-test
+spec:
+  selector:
+    app: redis-bull-scaler
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080

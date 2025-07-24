@@ -1,0 +1,64 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledJob
+metadata:
+  name: test-worker-job
+  namespace: bullmq-test
+spec:
+  jobTargetRef:
+    template:
+      spec:
+        restartPolicy: Never
+        containers:
+          - name: worker
+            image: redis:alpine
+            command:
+              - /bin/sh
+              - -c
+              - |
+                set -e
+                echo "Worker job started at $(date)"
+                echo "Connecting to Redis at redis-service.bullmq-test.svc.cluster.local:6379"
+
+                # Try to pop one job from the wait queue
+                JOB=$(redis-cli -h redis-service.bullmq-test.svc.cluster.local -p 6379 RPOP bull:test-queue:wait)
+
+                if [ -n "$JOB" ]; then
+                  echo "Processing job: $JOB"
+                  # Add job to active queue temporarily
+                  redis-cli -h redis-service.bullmq-test.svc.cluster.local -p 6379 LPUSH bull:test-queue:active "$JOB"
+
+                  # Simulate job processing time
+                  echo "Job processing started at $(date)"
+                  sleep 10
+                  echo "Job processing completed at $(date)"
+
+                  # Remove job from active queue (job completed)
+                  redis-cli -h redis-service.bullmq-test.svc.cluster.local -p 6379 LREM bull:test-queue:active 1 "$JOB"
+                  echo "Job $JOB completed and removed from active queue"
+                else
+                  echo "No jobs available in queue"
+                fi
+
+                echo "Worker job finished at $(date)"
+                exit 0
+            env:
+              - name: WORKER_ID
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.name
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: 200m
+                memory: 256Mi
+  pollingInterval: 10
+  minReplicaCount: 0
+  maxReplicaCount: 10
+  successfulJobsHistoryLimit: 0
+  failedJobsHistoryLimit: 1
+  triggers:
+    - type: external
+      metadata:
+        scalerAddress: redis-bull-scaler.bullmq-test.svc.cluster.local:8080
