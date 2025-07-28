@@ -62,3 +62,6 @@ spec:
     - type: external
       metadata:
         scalerAddress: redis-bull-scaler.bullmq-test.svc.cluster.local:8080
+        waitList: bull:test-queue:wait
+        activeList: bull:test-queue:active
+        maxPods: "10"

@@ -1,0 +1,334 @@
+---
+# Namespace for all resources
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bullmq-test
+---
+# Redis deployment for testing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: bullmq-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:alpine
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+---
+# Redis service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: bullmq-test
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+---
+# High priority worker jobs - processes urgent tasks quickly
+apiVersion: keda.sh/v1alpha1
+kind: ScaledJob
+metadata:
+  name: high-priority-worker
+  namespace: bullmq-test
+spec:
+  jobTargetRef:
+    template:
+      spec:
+        restartPolicy: Never
+        containers:
+          - name: worker
+            image: redis:alpine
+            command:
+              - /bin/sh
+              - -c
+              - |
+                set -e
+                echo "HIGH PRIORITY Worker job started at $(date)"
+                echo "Connecting to Redis at redis-service.bullmq-test.svc.cluster.local:6379"
+
+                # Try to pop one job from the wait queue
+                JOB=$(redis-cli -h redis-service.bullmq-test.svc.cluster.local -p 6379 RPOP bull:high-priority:wait)
+
+                if [ -n "$JOB" ]; then
+                  echo "Processing HIGH PRIORITY job: $JOB"
+                  # Add job to active queue temporarily
+                  redis-cli -h redis-service.bullmq-test.svc.cluster.local -p 6379 LPUSH bull:high-priority:active "$JOB"
+
+                  # Simulate fast processing for high priority jobs
+                  echo "High priority job processing started at $(date)"
+                  sleep 5
+                  echo "High priority job processing completed at $(date)"
+
+                  # Remove job from active queue (job completed)
+                  redis-cli -h redis-service.bullmq-test.svc.cluster.local -p 6379 LREM bull:high-priority:active 1 "$JOB"
+                  echo "High priority job $JOB completed and removed from active queue"
+                else
+                  echo "No high priority jobs available in queue"
+                fi
+
+                echo "HIGH PRIORITY Worker job finished at $(date)"
+                exit 0
+            env:
+              - name: WORKER_ID
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.name
+              - name: PRIORITY
+                value: "HIGH"
+            resources:
+              requests:
+                cpu: 200m
+                memory: 256Mi
+              limits:
+                cpu: 400m
+                memory: 512Mi
+  pollingInterval: 5
+  minReplicaCount: 0
+  maxReplicaCount: 20
+  successfulJobsHistoryLimit: 0
+  failedJobsHistoryLimit: 1
+  triggers:
+    - type: external
+      metadata:
+        scalerAddress: redis-bull-scaler.bullmq-test.svc.cluster.local:8080
+        waitList: bull:high-priority:wait
+        activeList: bull:high-priority:active
+        maxPods: "20"
+---
+# Standard priority worker jobs - processes regular tasks
+apiVersion: keda.sh/v1alpha1
+kind: ScaledJob
+metadata:
+  name: standard-priority-worker
+  namespace: bullmq-test
+spec:
+  jobTargetRef:
+    template:
+      spec:
+        restartPolicy: Never
+        containers:
+          - name: worker
+            image: redis:alpine
+            command:
+              - /bin/sh
+              - -c
+              - |
+                set -e
+                echo "STANDARD Worker job started at $(date)"
+                echo "Connecting to Redis at redis-service.bullmq-test.svc.cluster.local:6379"
+
+                # Try to pop one job from the wait queue
+                JOB=$(redis-cli -h redis-service.bullmq-test.svc.cluster.local -p 6379 RPOP bull:standard:wait)
+
+                if [ -n "$JOB" ]; then
+                  echo "Processing STANDARD job: $JOB"
+                  # Add job to active queue temporarily
+                  redis-cli -h redis-service.bullmq-test.svc.cluster.local -p 6379 LPUSH bull:standard:active "$JOB"
+
+                  # Simulate normal processing time
+                  echo "Standard job processing started at $(date)"
+                  sleep 10
+                  echo "Standard job processing completed at $(date)"
+
+                  # Remove job from active queue (job completed)
+                  redis-cli -h redis-service.bullmq-test.svc.cluster.local -p 6379 LREM bull:standard:active 1 "$JOB"
+                  echo "Standard job $JOB completed and removed from active queue"
+                else
+                  echo "No standard jobs available in queue"
+                fi
+
+                echo "STANDARD Worker job finished at $(date)"
+                exit 0
+            env:
+              - name: WORKER_ID
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.name
+              - name: PRIORITY
+                value: "STANDARD"
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: 200m
+                memory: 256Mi
+  pollingInterval: 10
+  minReplicaCount: 0
+  maxReplicaCount: 10
+  successfulJobsHistoryLimit: 0
+  failedJobsHistoryLimit: 1
+  triggers:
+    - type: external
+      metadata:
+        scalerAddress: redis-bull-scaler.bullmq-test.svc.cluster.local:8080
+        waitList: bull:standard:wait
+        activeList: bull:standard:active
+        maxPods: "10"
+---
+# Low priority worker jobs - processes background tasks slowly
+apiVersion: keda.sh/v1alpha1
+kind: ScaledJob
+metadata:
+  name: low-priority-worker
+  namespace: bullmq-test
+spec:
+  jobTargetRef:
+    template:
+      spec:
+        restartPolicy: Never
+        containers:
+          - name: worker
+            image: redis:alpine
+            command:
+              - /bin/sh
+              - -c
+              - |
+                set -e
+                echo "LOW PRIORITY Worker job started at $(date)"
+                echo "Connecting to Redis at redis-service.bullmq-test.svc.cluster.local:6379"
+
+                # Try to pop one job from the wait queue
+                JOB=$(redis-cli -h redis-service.bullmq-test.svc.cluster.local -p 6379 RPOP bull:low-priority:wait)
+
+                if [ -n "$JOB" ]; then
+                  echo "Processing LOW PRIORITY job: $JOB"
+                  # Add job to active queue temporarily
+                  redis-cli -h redis-service.bullmq-test.svc.cluster.local -p 6379 LPUSH bull:low-priority:active "$JOB"
+
+                  # Simulate slow processing for low priority jobs
+                  echo "Low priority job processing started at $(date)"
+                  sleep 20
+                  echo "Low priority job processing completed at $(date)"
+
+                  # Remove job from active queue (job completed)
+                  redis-cli -h redis-service.bullmq-test.svc.cluster.local -p 6379 LREM bull:low-priority:active 1 "$JOB"
+                  echo "Low priority job $JOB completed and removed from active queue"
+                else
+                  echo "No low priority jobs available in queue"
+                fi
+
+                echo "LOW PRIORITY Worker job finished at $(date)"
+                exit 0
+            env:
+              - name: WORKER_ID
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.name
+              - name: PRIORITY
+                value: "LOW"
+            resources:
+              requests:
+                cpu: 50m
+                memory: 64Mi
+              limits:
+                cpu: 100m
+                memory: 128Mi
+  pollingInterval: 30
+  minReplicaCount: 0
+  maxReplicaCount: 5
+  successfulJobsHistoryLimit: 0
+  failedJobsHistoryLimit: 1
+  triggers:
+    - type: external
+      metadata:
+        scalerAddress: redis-bull-scaler.bullmq-test.svc.cluster.local:8080
+        waitList: bull:low-priority:wait
+        activeList: bull:low-priority:active
+        maxPods: "5"
+---
+# Batch processing worker - processes large batches with longer cooldown
+apiVersion: keda.sh/v1alpha1
+kind: ScaledJob
+metadata:
+  name: batch-processor-worker
+  namespace: bullmq-test
+spec:
+  jobTargetRef:
+    template:
+      spec:
+        restartPolicy: Never
+        containers:
+          - name: worker
+            image: redis:alpine
+            command:
+              - /bin/sh
+              - -c
+              - |
+                set -e
+                echo "BATCH PROCESSOR Worker job started at $(date)"
+                echo "Connecting to Redis at redis-service.bullmq-test.svc.cluster.local:6379"
+
+                # Try to pop one job from the wait queue
+                JOB=$(redis-cli -h redis-service.bullmq-test.svc.cluster.local -p 6379 RPOP bull:batch:wait)
+
+                if [ -n "$JOB" ]; then
+                  echo "Processing BATCH job: $JOB"
+                  # Add job to active queue temporarily
+                  redis-cli -h redis-service.bullmq-test.svc.cluster.local -p 6379 LPUSH bull:batch:active "$JOB"
+
+                  # Simulate batch processing (longer duration)
+                  echo "Batch processing started at $(date)"
+                  sleep 30
+                  echo "Batch processing completed at $(date)"
+
+                  # Remove job from active queue (job completed)
+                  redis-cli -h redis-service.bullmq-test.svc.cluster.local -p 6379 LREM bull:batch:active 1 "$JOB"
+                  echo "Batch job $JOB completed and removed from active queue"
+                else
+                  echo "No batch jobs available in queue"
+                fi
+
+                echo "BATCH PROCESSOR Worker job finished at $(date)"
+                exit 0
+            env:
+              - name: WORKER_ID
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.name
+              - name: PRIORITY
+                value: "BATCH"
+            resources:
+              requests:
+                cpu: 500m
+                memory: 1Gi
+              limits:
+                cpu: 1000m
+                memory: 2Gi
+  pollingInterval: 60
+  minReplicaCount: 0
+  maxReplicaCount: 3
+  successfulJobsHistoryLimit: 0
+  failedJobsHistoryLimit: 1
+  scalingStrategy:
+    strategy: "default"
+  triggers:
+    - type: external
+      metadata:
+        scalerAddress: redis-bull-scaler.bullmq-test.svc.cluster.local:8080
+        waitList: bull:batch:wait
+        activeList: bull:batch:active
+        maxPods: "3"
